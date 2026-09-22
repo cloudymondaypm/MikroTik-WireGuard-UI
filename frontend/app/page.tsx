@@ -1,0 +1,323 @@
+"use client";
+
+import {
+  Archive,
+  Check,
+  Copy,
+  Download,
+  Loader2,
+  LogOut,
+  Moon,
+  Plus,
+  QrCode,
+  RefreshCcw,
+  Sun,
+  Trash2,
+  UserRound,
+  X,
+} from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import QRCode from "react-qr-code";
+
+type Client = {
+  id: string;
+  name: string;
+  address: string;
+  enabled: boolean;
+  managed: boolean;
+  publicKey: string;
+  lastHandshake?: string;
+  rx?: string;
+  tx?: string;
+};
+
+function WireMark() {
+  return (
+    <svg width="27" height="34" viewBox="0 0 27 34" aria-hidden="true">
+      <path d="M15.7 2.5c-3.4 0-5.7 2.1-5.7 5.1 0 1.8.8 3 2.1 4.1-3.9.9-6.3 3.8-6.3 7.2 0 4.6 3.4 8.2 8.2 8.2 4.6 0 8-3.2 8-7.5 0-3-1.6-5.3-4.6-7.1 1.6-1.3 2.5-2.9 2.5-4.9 0-2.9-1.8-5.1-4.2-5.1Zm-.5 4.1c.8 0 1.4.6 1.4 1.4 0 .9-.6 1.6-1.6 2.2-.7-.5-1.2-1.1-1.2-2 0-1 .6-1.6 1.4-1.6Zm-1.3 9.1c2.5 0 4.3 1.5 4.3 3.8 0 2.2-1.6 3.8-4 3.8-2.6 0-4.4-1.7-4.4-4 0-2.1 1.6-3.6 4.1-3.6Z" fill="currentColor"/>
+      <path d="M12.7 11.2 9 6.7l2.8-1.4 3.6 4.2-2.7 1.7Z" fill="currentColor"/>
+    </svg>
+  );
+}
+
+async function api(path: string, init?: RequestInit) {
+  const res = await fetch(path, init);
+  if (res.status === 401) throw new Error("AUTH");
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.detail || `Request failed (${res.status})`);
+  }
+  return res;
+}
+
+export default function Home() {
+  const router = useRouter();
+  const [clients, setClients] = useState<Client[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const [dark, setDark] = useState(false);
+  const [newOpen, setNewOpen] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [newAddress, setNewAddress] = useState("");
+  const [config, setConfig] = useState("");
+  const [configName, setConfigName] = useState("");
+  const [copied, setCopied] = useState(false);
+  const restoreInput = useRef<HTMLInputElement>(null);
+
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    setError("");
+    try {
+      const res = await api("/api/clients", { cache: "no-store" });
+      setClients(await res.json());
+    } catch (err) {
+      if (err instanceof Error && err.message === "AUTH") {
+        router.replace("/login");
+        return;
+      }
+      setError(err instanceof Error ? err.message : "Unable to load clients");
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  }, [router]);
+
+  useEffect(() => {
+    load();
+    const timer = window.setInterval(() => load(true), 10000);
+    return () => window.clearInterval(timer);
+  }, [load]);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", dark);
+  }, [dark]);
+
+  async function logout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.replace("/login");
+  }
+
+  async function createClient() {
+    if (!newName.trim()) return;
+    setBusy("new");
+    setError("");
+    try {
+      await api("/api/clients", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newName.trim(), address: newAddress.trim() || null }),
+      });
+      setNewOpen(false);
+      setNewName("");
+      setNewAddress("");
+      await load(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to create client");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function toggle(client: Client) {
+    setBusy(client.id);
+    setClients((old) => old.map((c) => c.id === client.id ? { ...c, enabled: !c.enabled } : c));
+    try {
+      await api(`/api/clients/${encodeURIComponent(client.id)}/toggle`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: !client.enabled }),
+      });
+    } catch (err) {
+      setClients((old) => old.map((c) => c.id === client.id ? { ...c, enabled: client.enabled } : c));
+      setError(err instanceof Error ? err.message : "Unable to update client");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function remove(client: Client) {
+    if (!window.confirm(`Delete ${client.name}? This removes the peer from MikroTik.`)) return;
+    setBusy(client.id);
+    try {
+      await api(`/api/clients/${encodeURIComponent(client.id)}`, { method: "DELETE" });
+      setClients((old) => old.filter((c) => c.id !== client.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to delete client");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function getConfig(client: Client) {
+    const res = await api(`/api/clients/${encodeURIComponent(client.id)}/config`, { cache: "no-store" });
+    return await res.text();
+  }
+
+  async function showQr(client: Client) {
+    setBusy(client.id);
+    setError("");
+    try {
+      const text = await getConfig(client);
+      setConfig(text);
+      setConfigName(client.name);
+      setQrOpen(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to build client config");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function downloadConfig(client: Client) {
+    setBusy(client.id);
+    setError("");
+    try {
+      const text = await getConfig(client);
+      const blob = new Blob([text], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${client.name.replace(/[^a-z0-9-_]+/gi, "-").toLowerCase()}.conf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to download client config");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function backup() {
+    setBusy("backup");
+    try {
+      const res = await api("/api/backup", { cache: "no-store" });
+      const data = await res.json();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `mikrotik-wireguard-backup-${new Date().toISOString().slice(0,10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Backup failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function restoreFile(file?: File) {
+    if (!file) return;
+    setBusy("restore");
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      await api("/api/restore", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      await load(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Restore failed");
+    } finally {
+      setBusy(null);
+      if (restoreInput.current) restoreInput.current.value = "";
+    }
+  }
+
+  async function copyConfig() {
+    await navigator.clipboard.writeText(config);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1400);
+  }
+
+  return (
+    <main className="page-shell">
+      <section className="content-wrap">
+        <header className="topbar">
+          <div className="brand">
+            <span className="wire-mark"><WireMark /></span>
+            <span>WireGuard</span>
+          </div>
+          <div className="header-actions">
+            <button className="theme-toggle" aria-label="Toggle theme" onClick={() => setDark((v) => !v)}>
+              {dark ? <Sun size={18} /> : <Moon size={18} fill="currentColor" />}
+            </button>
+            <button className="logout-button" onClick={logout}>Logout <LogOut size={13} /></button>
+          </div>
+        </header>
+
+        <section className="clients-card">
+          <div className="clients-card-head">
+            <h1>Clients</h1>
+            <div className="card-actions">
+              <input ref={restoreInput} hidden type="file" accept="application/json,.json" onChange={(e) => restoreFile(e.target.files?.[0])} />
+              <button onClick={() => restoreInput.current?.click()} disabled={busy === "restore"}>
+                {busy === "restore" ? <Loader2 className="spin" size={16} /> : <RefreshCcw size={16} />}<span>Restore</span>
+              </button>
+              <button onClick={backup} disabled={busy === "backup"}>
+                {busy === "backup" ? <Loader2 className="spin" size={16} /> : <Archive size={16} />}<span>Backup</span>
+              </button>
+              <button onClick={() => setNewOpen(true)}><Plus size={16} /><span>New</span></button>
+            </div>
+          </div>
+
+          {error && <div className="inline-error">{error}<button onClick={() => setError("")}><X size={14}/></button></div>}
+
+          <div className="client-list">
+            {loading ? (
+              <div className="loading-row"><Loader2 className="spin" size={22} /> Loading clients…</div>
+            ) : clients.length === 0 ? (
+              <div className="empty-row">No WireGuard peers found on the selected MikroTik interface.</div>
+            ) : clients.map((client) => (
+              <div className="client-row" key={client.id || client.publicKey}>
+                <div className="avatar"><UserRound size={22} fill="currentColor" strokeWidth={0} /></div>
+                <div className="client-meta">
+                  <div className="client-name">{client.name}</div>
+                  <div className="client-address">{client.address}</div>
+                </div>
+                <div className="client-controls">
+                  <button
+                    className={`switch ${client.enabled ? "on" : "off"}`}
+                    onClick={() => toggle(client)}
+                    aria-label={client.enabled ? "Disable client" : "Enable client"}
+                    disabled={busy === client.id}
+                  ><span /></button>
+                  <button className="icon-square" title={client.managed ? "Show QR code" : "Private key unavailable"} disabled={!client.managed || busy === client.id} onClick={() => showQr(client)}><QrCode size={18} /></button>
+                  <button className="icon-square" title={client.managed ? "Download configuration" : "Private key unavailable"} disabled={!client.managed || busy === client.id} onClick={() => downloadConfig(client)}><Download size={18} /></button>
+                  <button className="icon-square danger" title="Delete client" disabled={busy === client.id} onClick={() => remove(client)}><Trash2 size={18} fill="currentColor" /></button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <footer>MikroTik WireGuard UI · RouterOS peer manager</footer>
+      </section>
+
+      {newOpen && (
+        <div className="modal-backdrop" onMouseDown={() => setNewOpen(false)}>
+          <div className="modal" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="modal-head"><h2>New Client</h2><button onClick={() => setNewOpen(false)}><X size={19}/></button></div>
+            <label>Client name<input placeholder="e.g. Nika Laptop" value={newName} onChange={(e) => setNewName(e.target.value)} autoFocus /></label>
+            <label>IP address <small>optional</small><input placeholder="Auto from configured pool" value={newAddress} onChange={(e) => setNewAddress(e.target.value)} /></label>
+            <div className="modal-actions"><button className="ghost" onClick={() => setNewOpen(false)}>Cancel</button><button className="primary" disabled={!newName.trim() || busy === "new"} onClick={createClient}>{busy === "new" ? "Creating…" : "Create"}</button></div>
+          </div>
+        </div>
+      )}
+
+      {qrOpen && (
+        <div className="modal-backdrop" onMouseDown={() => setQrOpen(false)}>
+          <div className="modal qr-modal" onMouseDown={(e) => e.stopPropagation()}>
+            <div className="modal-head"><h2>{configName}</h2><button onClick={() => setQrOpen(false)}><X size={19}/></button></div>
+            <div className="qr-box"><QRCode value={config} size={248} /></div>
+            <div className="qr-actions"><button className="ghost" onClick={copyConfig}>{copied ? <Check size={16}/> : <Copy size={16}/>} {copied ? "Copied" : "Copy config"}</button></div>
+          </div>
+        </div>
+      )}
+    </main>
+  );
+}

@@ -62,7 +62,9 @@ class MikroTikREST:
         return await self._request("PUT", "interface/wireguard/peers", json=payload)
 
     async def set_peer_disabled(self, peer_id: str, disabled: bool):
-        escaped = quote(peer_id, safe="")
+        # RouterOS resource IDs are shaped like "*A". The asterisk is part
+        # of the canonical ID and must remain literal in REST resource paths.
+        escaped = quote(peer_id, safe="*")
         return await self._request(
             "PATCH",
             f"interface/wireguard/peers/{escaped}",
@@ -70,7 +72,7 @@ class MikroTikREST:
         )
 
     async def delete_peer(self, peer_id: str):
-        escaped = quote(peer_id, safe="")
+        escaped = quote(peer_id, safe="*")
         return await self._request("DELETE", f"interface/wireguard/peers/{escaped}")
 
 

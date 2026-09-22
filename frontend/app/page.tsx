@@ -92,7 +92,7 @@ function formatRate(value: number) {
 
 function handshakeLabel(value?: string | number | null) {
   const seconds = parseRouterDurationSeconds(value);
-  if (seconds === null) return "Never";
+  if (seconds === null || seconds === 0) return "Never";
   if (seconds < 5) return "just now";
   if (seconds < 60) return `${Math.floor(seconds)} seconds ago`;
   if (seconds < 3600) {
@@ -110,7 +110,7 @@ function handshakeLabel(value?: string | number | null) {
 function isClientOnline(client: Client) {
   if (!client.enabled) return false;
   const handshakeSeconds = parseRouterDurationSeconds(client.lastHandshake);
-  const hasRecentHandshake = handshakeSeconds !== null && handshakeSeconds <= ONLINE_WINDOW_SECONDS;
+  const hasRecentHandshake = handshakeSeconds !== null && handshakeSeconds > 0 && handshakeSeconds <= ONLINE_WINDOW_SECONDS;
   const hasLiveTraffic = (client.rxRate ?? 0) > 0 || (client.txRate ?? 0) > 0;
   return hasRecentHandshake || hasLiveTraffic;
 }

@@ -23,6 +23,8 @@ services:
     restart: unless-stopped
     environment:
       BACKEND_INTERNAL_URL: http://backend:8000
+      HOSTNAME: 0.0.0.0
+      PORT: "3000"
     depends_on:
       backend:
         condition: service_healthy

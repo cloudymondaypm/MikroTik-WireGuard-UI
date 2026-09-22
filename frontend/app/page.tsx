@@ -30,7 +30,90 @@ type Client = {
   lastHandshake?: string;
   rx?: string;
   tx?: string;
+  rxRate?: number;
+  txRate?: number;
 };
+
+type TrafficSample = {
+  rx: number;
+  tx: number;
+  at: number;
+};
+
+const ONLINE_WINDOW_SECONDS = 180;
+const LIVE_REFRESH_MS = 2000;
+
+function counterValue(value?: string | number | null) {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+}
+
+function parseRouterDurationSeconds(value?: string | number | null): number | null {
+  if (value === undefined || value === null) return null;
+  const raw = String(value).trim().toLowerCase();
+  if (!raw || raw === "never") return null;
+
+  if (/^\d+(?:\.\d+)?$/.test(raw)) return Number(raw);
+
+  const clock = raw.match(/^(\d+):(\d{2}):(\d{2})(?:\.(\d+))?$/);
+  if (clock) {
+    return Number(clock[1]) * 3600 + Number(clock[2]) * 60 + Number(clock[3]);
+  }
+
+  const unitPattern = /(\d+(?:\.\d+)?)\s*(w|d|h|m|s)/g;
+  const multipliers: Record<string, number> = { w: 604800, d: 86400, h: 3600, m: 60, s: 1 };
+  let total = 0;
+  let matched = false;
+  let match: RegExpExecArray | null;
+  while ((match = unitPattern.exec(raw)) !== null) {
+    matched = true;
+    total += Number(match[1]) * multipliers[match[2]];
+  }
+  if (matched && raw.replace(unitPattern, "").trim() === "") return total;
+
+  return null;
+}
+
+function formatBytes(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let size = value;
+  let unit = 0;
+  while (size >= 1000 && unit < units.length - 1) {
+    size /= 1000;
+    unit += 1;
+  }
+  return unit === 0 ? `${Math.round(size)} B` : `${size.toFixed(2)} ${units[unit]}`;
+}
+
+function formatRate(value: number) {
+  return `${formatBytes(value)}/s`;
+}
+
+function handshakeLabel(value?: string | number | null) {
+  const seconds = parseRouterDurationSeconds(value);
+  if (seconds === null) return "Never";
+  if (seconds < 5) return "just now";
+  if (seconds < 60) return `${Math.floor(seconds)} seconds ago`;
+  if (seconds < 3600) {
+    const minutes = Math.floor(seconds / 60);
+    return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  }
+  if (seconds < 86400) {
+    const hours = Math.floor(seconds / 3600);
+    return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  }
+  const days = Math.floor(seconds / 86400);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
+function isClientOnline(client: Client) {
+  if (!client.enabled) return false;
+  const handshakeSeconds = parseRouterDurationSeconds(client.lastHandshake);
+  const hasRecentHandshake = handshakeSeconds !== null && handshakeSeconds <= ONLINE_WINDOW_SECONDS;
+  const hasLiveTraffic = (client.rxRate ?? 0) > 0 || (client.txRate ?? 0) > 0;
+  return hasRecentHandshake || hasLiveTraffic;
+}
 
 function WireMark() {
   return (
@@ -66,13 +149,37 @@ export default function Home() {
   const [configName, setConfigName] = useState("");
   const [copied, setCopied] = useState(false);
   const restoreInput = useRef<HTMLInputElement>(null);
+  const trafficSamples = useRef<Record<string, TrafficSample>>({});
+  const refreshing = useRef(false);
 
   const load = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
-    setError("");
+    if (refreshing.current) return;
+    refreshing.current = true;
+    if (!silent) {
+      setLoading(true);
+      setError("");
+    }
     try {
       const res = await api("/api/clients", { cache: "no-store" });
-      setClients(await res.json());
+      const incoming: Client[] = await res.json();
+      const now = Date.now();
+      const nextSamples: Record<string, TrafficSample> = {};
+
+      const withRates = incoming.map((client) => {
+        const key = client.id || client.publicKey;
+        const rx = counterValue(client.rx);
+        const tx = counterValue(client.tx);
+        const previous = trafficSamples.current[key];
+        const elapsed = previous ? Math.max((now - previous.at) / 1000, 0.25) : 0;
+        const rxRate = previous && rx >= previous.rx ? (rx - previous.rx) / elapsed : 0;
+        const txRate = previous && tx >= previous.tx ? (tx - previous.tx) / elapsed : 0;
+
+        nextSamples[key] = { rx, tx, at: now };
+        return { ...client, rxRate, txRate };
+      });
+
+      trafficSamples.current = nextSamples;
+      setClients(withRates);
     } catch (err) {
       if (err instanceof Error && err.message === "AUTH") {
         router.replace("/login");
@@ -80,13 +187,14 @@ export default function Home() {
       }
       setError(err instanceof Error ? err.message : "Unable to load clients");
     } finally {
+      refreshing.current = false;
       if (!silent) setLoading(false);
     }
   }, [router]);
 
   useEffect(() => {
     load();
-    const timer = window.setInterval(() => load(true), 10000);
+    const timer = window.setInterval(() => load(true), LIVE_REFRESH_MS);
     return () => window.clearInterval(timer);
   }, [load]);
 
@@ -272,26 +380,47 @@ export default function Home() {
               <div className="loading-row"><Loader2 className="spin" size={22} /> Loading clients…</div>
             ) : clients.length === 0 ? (
               <div className="empty-row">No WireGuard peers found on the selected MikroTik interface.</div>
-            ) : clients.map((client) => (
-              <div className="client-row" key={client.id || client.publicKey}>
-                <div className="avatar"><UserRound size={22} fill="currentColor" strokeWidth={0} /></div>
-                <div className="client-meta">
-                  <div className="client-name">{client.name}</div>
-                  <div className="client-address">{client.address}</div>
+            ) : clients.map((client) => {
+              const online = isClientOnline(client);
+              const statusClass = !client.enabled ? "disabled" : online ? "online" : "offline";
+              const statusTitle = !client.enabled ? "Disabled" : online ? "Online" : "Offline";
+              return (
+                <div className="client-row" key={client.id || client.publicKey}>
+                  <div className="avatar">
+                    <UserRound size={22} fill="currentColor" strokeWidth={0} />
+                    <span className={`status-dot ${statusClass}`} title={statusTitle} aria-label={statusTitle} />
+                  </div>
+                  <div className="client-meta">
+                    <div className="client-name">{client.name}</div>
+                    <div className="client-subline">
+                      <span className="client-address">{client.address}</span>
+                      <span className="last-seen">{handshakeLabel(client.lastHandshake)}</span>
+                    </div>
+                  </div>
+                  <div className="client-stats" aria-label={`Traffic for ${client.name}`}>
+                    <div className="traffic-stat" title="Current receive rate">
+                      <div className="traffic-rate"><span className="traffic-arrow">↓</span>{formatRate(client.rxRate ?? 0)}</div>
+                      <div className="traffic-total">{formatBytes(counterValue(client.rx))}</div>
+                    </div>
+                    <div className="traffic-stat" title="Current transmit rate">
+                      <div className="traffic-rate"><span className="traffic-arrow">↑</span>{formatRate(client.txRate ?? 0)}</div>
+                      <div className="traffic-total">{formatBytes(counterValue(client.tx))}</div>
+                    </div>
+                  </div>
+                  <div className="client-controls">
+                    <button
+                      className={`switch ${client.enabled ? "on" : "off"}`}
+                      onClick={() => toggle(client)}
+                      aria-label={client.enabled ? "Disable client" : "Enable client"}
+                      disabled={busy === client.id}
+                    ><span /></button>
+                    <button className="icon-square" title={client.managed ? "Show QR code" : "Private key unavailable"} disabled={!client.managed || busy === client.id} onClick={() => showQr(client)}><QrCode size={18} /></button>
+                    <button className="icon-square" title={client.managed ? "Download configuration" : "Private key unavailable"} disabled={!client.managed || busy === client.id} onClick={() => downloadConfig(client)}><Download size={18} /></button>
+                    <button className="icon-square danger" title="Delete client" disabled={busy === client.id} onClick={() => remove(client)}><Trash2 size={18} fill="currentColor" /></button>
+                  </div>
                 </div>
-                <div className="client-controls">
-                  <button
-                    className={`switch ${client.enabled ? "on" : "off"}`}
-                    onClick={() => toggle(client)}
-                    aria-label={client.enabled ? "Disable client" : "Enable client"}
-                    disabled={busy === client.id}
-                  ><span /></button>
-                  <button className="icon-square" title={client.managed ? "Show QR code" : "Private key unavailable"} disabled={!client.managed || busy === client.id} onClick={() => showQr(client)}><QrCode size={18} /></button>
-                  <button className="icon-square" title={client.managed ? "Download configuration" : "Private key unavailable"} disabled={!client.managed || busy === client.id} onClick={() => downloadConfig(client)}><Download size={18} /></button>
-                  <button className="icon-square danger" title="Delete client" disabled={busy === client.id} onClick={() => remove(client)}><Trash2 size={18} fill="currentColor" /></button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
 

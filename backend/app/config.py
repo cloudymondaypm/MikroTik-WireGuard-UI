@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     client_pool_cidr: str = "10.120.0.0/24"
     wg_endpoint_host: str = ""
     wg_client_dns: str = "1.1.1.1"
-    wg_client_allowed_ips: str = "0.0.0.0/0, ::/0"
+    wg_client_allowed_ips: str = "10.10.0.0/16"
     wg_persistent_keepalive: int = 25
 
     data_dir: str = "/data"

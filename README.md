@@ -63,7 +63,7 @@ Default username in the example is `admin`; use the password you placed in `.env
 - `MIKROTIK_WG_INTERFACE`: exact RouterOS WireGuard interface name.
 - `CLIENT_POOL_CIDR`: address pool used for new road-warrior clients. This deployment uses `10.10.16.0/24`; `10.10.16.1` is reserved for MikroTik and clients start at `.2`.
 - `WG_ENDPOINT_HOST`: public IP or DNS name clients use to reach MikroTik.
-- `WG_CLIENT_ALLOWED_IPS`: what client traffic goes into the tunnel. This deployment uses full-tunnel IPv4 routing, `0.0.0.0/0`; client traffic reaches the internet through the MikroTik WAN NAT while still retaining access to the LAN.
+- `WG_CLIENT_ALLOWED_IPS`: what client traffic goes into the tunnel. This deployment uses split-tunnel IPv4 routing, `10.10.0.0/16`; only local 10.10.x.x destinations traverse WireGuard and ordinary internet traffic uses the client's own connection. DNS remains `10.10.1.15` through the tunnel for internal hostnames. Previously imported profiles must be re-imported or edited on each device.
 - `WG_CLIENT_DNS`: DNS sent in generated client configurations.
 
 ## Security notes

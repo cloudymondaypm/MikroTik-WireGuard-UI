@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
@@ -9,6 +9,15 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/setup/status", { cache: "no-store" })
+      .then((res) => res.json())
+      .then((data) => {
+        if (!data.configured) router.replace("/setup");
+      })
+      .catch(() => {});
+  }, [router]);
 
   async function submit(e: FormEvent) {
     e.preventDefault();

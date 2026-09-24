@@ -11,7 +11,7 @@ from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Response
 from pydantic import BaseModel, Field, model_validator
 
-from .config import settings
+from .config import is_configured, save_runtime_config, settings
 from .db import (
     all_clients,
     delete_client,
@@ -39,6 +39,27 @@ class ToggleRequest(BaseModel):
     enabled: bool
 
 
+class AppConfigRequest(BaseModel):
+    app_username: str = Field(default="admin", min_length=1, max_length=80)
+    app_password: str = ""
+    cookie_secure: bool = False
+    session_hours: int = Field(default=12, ge=1, le=168)
+
+    mikrotik_host: str = Field(min_length=1, max_length=255)
+    mikrotik_username: str = Field(min_length=1, max_length=80)
+    mikrotik_password: str = ""
+    mikrotik_rest_scheme: str = "https"
+    mikrotik_rest_port: int = Field(default=443, ge=1, le=65535)
+    mikrotik_verify_tls: bool = True
+    mikrotik_wg_interface: str = Field(default="wireguard1", min_length=1, max_length=80)
+
+    client_pool_cidr: str = Field(default="10.120.0.0/24", min_length=1, max_length=64)
+    wg_endpoint_host: str = Field(min_length=1, max_length=255)
+    wg_client_dns: str = Field(default="1.1.1.1", max_length=255)
+    wg_client_allowed_ips: str = Field(default="0.0.0.0/0", min_length=1, max_length=512)
+    wg_persistent_keepalive: int = Field(default=25, ge=0, le=65535)
+
+
 class RestoreClient(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     address: str
@@ -64,6 +85,8 @@ class RestorePayload(BaseModel):
 
 
 def require_auth(wg_session: str | None = Cookie(default=None)):
+    if not is_configured():
+        raise HTTPException(status_code=503, detail="Application setup is not complete")
     if not wg_session:
         raise HTTPException(status_code=401, detail="Not authenticated")
     try:
@@ -77,17 +100,87 @@ def require_auth(wg_session: str | None = Cookie(default=None)):
 
 @app.on_event("startup")
 def startup():
-    settings.validate_security()
     init_db()
 
 
 @app.get("/healthz")
 def healthz():
+    return {"ok": True, "configured": is_configured()}
+
+
+@app.get("/api/setup/status")
+def setup_status():
+    return {"configured": is_configured()}
+
+
+def _public_settings():
+    return {
+        "app_username": settings.app_username,
+        "app_password_set": bool(settings.app_password),
+        "cookie_secure": settings.cookie_secure,
+        "session_hours": settings.session_hours,
+        "mikrotik_host": settings.mikrotik_host,
+        "mikrotik_username": settings.mikrotik_username,
+        "mikrotik_password_set": bool(settings.mikrotik_password),
+        "mikrotik_rest_scheme": settings.mikrotik_rest_scheme,
+        "mikrotik_rest_port": settings.mikrotik_rest_port,
+        "mikrotik_verify_tls": settings.mikrotik_verify_tls,
+        "mikrotik_wg_interface": settings.mikrotik_wg_interface,
+        "client_pool_cidr": settings.client_pool_cidr,
+        "wg_endpoint_host": settings.wg_endpoint_host,
+        "wg_client_dns": settings.wg_client_dns,
+        "wg_client_allowed_ips": settings.wg_client_allowed_ips,
+        "wg_persistent_keepalive": settings.wg_persistent_keepalive,
+    }
+
+
+@app.post("/api/setup")
+def initial_setup(body: AppConfigRequest):
+    if is_configured():
+        raise HTTPException(status_code=409, detail="Application is already configured")
+    values = body.model_dump()
+    try:
+        save_runtime_config(values)
+    except (ValueError, TypeError) as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
     return {"ok": True}
+
+
+@app.get("/api/settings")
+def get_settings(_: dict = Depends(require_auth)):
+    return _public_settings()
+
+
+@app.patch("/api/settings")
+def update_settings(body: AppConfigRequest, _: dict = Depends(require_auth)):
+    values = body.model_dump()
+    if not values["app_password"]:
+        values["app_password"] = settings.app_password
+    if not values["mikrotik_password"]:
+        values["mikrotik_password"] = settings.mikrotik_password
+
+    old_username = settings.app_username
+    old_password = settings.app_password
+    try:
+        save_runtime_config(values)
+    except (ValueError, TypeError) as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+
+    return {
+        "ok": True,
+        "reauth_required": old_username != settings.app_username or old_password != settings.app_password,
+    }
+
+
+@app.post("/api/settings/test")
+async def test_settings(_: dict = Depends(require_auth)):
+    return await router.test_connection()
 
 
 @app.post("/api/auth/login")
 def login(body: LoginRequest, response: Response):
+    if not is_configured():
+        raise HTTPException(status_code=409, detail="Complete first-time setup before signing in")
     username_ok = secrets.compare_digest(body.username, settings.app_username)
     password_ok = secrets.compare_digest(body.password, settings.app_password)
     if not (username_ok and password_ok):

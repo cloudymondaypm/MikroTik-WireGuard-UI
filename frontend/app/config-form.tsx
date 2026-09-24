@@ -40,7 +40,7 @@ const defaults: AppConfig = {
   mikrotik_password: "",
   mikrotik_rest_scheme: "https",
   mikrotik_rest_port: 443,
-  mikrotik_verify_tls: true,
+  mikrotik_verify_tls: false,
   mikrotik_wg_interface: "wireguard1",
   client_pool_cidr: "10.120.0.0/24",
   wg_endpoint_host: "",
@@ -138,7 +138,7 @@ export default function ConfigForm({
           <label>WireGuard interface<input placeholder="wireguard1" value={form.mikrotik_wg_interface} onChange={(e) => set("mikrotik_wg_interface", e.target.value)} required /></label>
           <label>REST scheme<select value={form.mikrotik_rest_scheme} onChange={(e) => set("mikrotik_rest_scheme", e.target.value)}><option value="https">https</option><option value="http">http</option></select></label>
           <label>REST port<input type="number" min={1} max={65535} value={form.mikrotik_rest_port} onChange={(e) => set("mikrotik_rest_port", Number(e.target.value))} required /></label>
-          <label className="check-label"><input type="checkbox" checked={form.mikrotik_verify_tls} onChange={(e) => set("mikrotik_verify_tls", e.target.checked)} /> Verify router TLS certificate</label>
+          <label className="check-label"><input type="checkbox" checked={form.mikrotik_verify_tls} onChange={(e) => set("mikrotik_verify_tls", e.target.checked)} /> Verify router TLS certificate <small>leave unchecked for a self-signed certificate on a trusted private network; a mismatch here shows as &quot;certificate verify failed&quot;</small></label>
         </div>
       </section>
 

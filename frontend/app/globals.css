@@ -38,7 +38,9 @@ button { color: inherit; }
 .wire-mark { display: inline-flex; transform: translateY(-1px); flex: 0 0 auto; }
 .brand-logo { width: 34px; height: 34px; display: block; border-radius: 50%; object-fit: contain; }
 .brand-login .brand-logo { width: 32px; height: 32px; }
-.header-actions { display: flex; align-items: center; gap: 13px; padding-top: 13px; }
+.header-actions { display: flex; align-items: center; gap: 10px; padding-top: 13px; }
+.config-button { height: 34px; border: 1px solid var(--line); background: var(--panel); color: #68778a; border-radius: 6px; padding: 0 10px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 12px; }
+.config-button:hover { background: var(--soft); color: var(--text); }
 .theme-toggle { width: 34px; height: 34px; border-radius: 999px; border: 0; background: #edf0f4; color: #566477; display: grid; place-items: center; cursor: pointer; }
 html.dark .theme-toggle { background: #2a313a; color: #d5dce5; }
 .logout-button { border: 0; background: transparent; color: #9aa7b8; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; padding: 7px 0; font-size: 13px; }
@@ -148,4 +150,41 @@ html.dark footer { color: #5f6975; }
 @media (max-width: 520px) {
   .client-stats { display: none; }
   .last-seen { display: none; }
+}
+
+
+/* First-run setup and configuration */
+.settings-shell { min-height: 100vh; padding: 36px 18px 60px; }
+.settings-card { width: min(860px, 100%); margin: 0 auto; background: var(--panel); border-radius: 10px; box-shadow: var(--shadow); overflow: hidden; }
+.settings-brand { padding: 28px 30px 20px; border-bottom: 1px solid var(--line); }
+.settings-brand p { margin: 8px 0 0 43px; color: var(--muted); font-size: 13px; }
+.settings-head { padding: 24px 28px; display: flex; align-items: center; justify-content: space-between; gap: 18px; border-bottom: 1px solid var(--line); }
+.settings-head h1 { margin: 0; font-size: 25px; }
+.settings-head p { margin: 6px 0 0; color: var(--muted); font-size: 13px; }
+.back-button { height: 38px; display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.setup-note { margin: 22px 28px 0; padding: 12px 14px; border-radius: 7px; background: var(--soft); color: var(--muted); font-size: 13px; line-height: 1.5; }
+.config-form { padding: 8px 28px 28px; }
+.config-section { padding: 22px 0; border-bottom: 1px solid var(--line); }
+.config-section:last-of-type { border-bottom: 0; }
+.config-section h2 { margin: 0 0 16px; font-size: 16px; font-weight: 650; }
+.config-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 18px; }
+.config-grid label { display: block; color: var(--muted); font-size: 12px; }
+.config-grid label small { float: right; opacity: .72; }
+.config-grid input:not([type="checkbox"]), .config-grid select { width: 100%; height: 41px; margin-top: 6px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--text); outline: none; }
+.config-grid input:focus, .config-grid select:focus { border-color: #aab7c7; box-shadow: 0 0 0 3px rgba(100,116,139,.08); }
+.config-grid .check-label { min-height: 41px; display: flex; align-items: center; gap: 9px; padding-top: 20px; color: var(--text); }
+.config-grid .check-label input { width: 16px; height: 16px; }
+.config-grid .check-label small { float: none; color: var(--muted); }
+.config-actions { display: flex; justify-content: flex-end; gap: 9px; padding-top: 22px; }
+.config-actions button { min-height: 40px; padding: 0 14px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border-radius: 6px; cursor: pointer; }
+.config-save { min-width: 160px; }
+.success-box { margin-top: 16px; padding: 10px 12px; border-radius: 6px; background: rgba(34,164,93,.10); color: #19824a; font-size: 13px; display: flex; align-items: center; gap: 7px; }
+
+@media (max-width: 650px) {
+  .config-grid { grid-template-columns: 1fr; }
+  .settings-head { align-items: flex-start; }
+  .settings-card { border-radius: 8px; }
+  .config-form, .settings-head { padding-left: 18px; padding-right: 18px; }
+  .setup-note { margin-left: 18px; margin-right: 18px; }
+  .config-button { width: 34px; padding: 0; justify-content: center; font-size: 0; }
 }

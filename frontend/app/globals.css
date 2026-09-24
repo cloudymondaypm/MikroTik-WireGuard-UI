@@ -35,7 +35,7 @@ button { color: inherit; }
 .content-wrap { width: min(768px, calc(100vw - 32px)); margin: 0 auto; padding-top: 66px; }
 .topbar { height: 64px; display: flex; align-items: flex-start; justify-content: space-between; }
 .brand { display: flex; align-items: center; gap: 11px; font-size: 37px; font-weight: 650; letter-spacing: -1.2px; line-height: 1; }
-.wire-mark { color: var(--brand); display: inline-flex; transform: translateY(-1px); }
+.wire-mark { display: inline-flex; transform: translateY(-1px); flex: 0 0 auto; }\n.brand-logo { width: 34px; height: 34px; display: block; border-radius: 50%; object-fit: contain; }\n.brand-login .brand-logo { width: 32px; height: 32px; }
 .header-actions { display: flex; align-items: center; gap: 13px; padding-top: 13px; }
 .theme-toggle { width: 34px; height: 34px; border-radius: 999px; border: 0; background: #edf0f4; color: #566477; display: grid; place-items: center; cursor: pointer; }
 html.dark .theme-toggle { background: #2a313a; color: #d5dce5; }
@@ -123,7 +123,7 @@ html.dark footer { color: #5f6975; }
 
 @media (max-width: 680px) {
   .content-wrap { width: min(100% - 18px, 768px); padding-top: 28px; }
-  .brand { font-size: 30px; }
+  .brand { font-size: 30px; }\n  .brand-logo { width: 30px; height: 30px; }
   .topbar { height: 62px; }
   .clients-card-head { height: auto; min-height: 64px; padding: 12px; gap: 12px; }
   .clients-card-head h1 { font-size: 22px; }

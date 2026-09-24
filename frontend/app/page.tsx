@@ -11,6 +11,7 @@ import {
   Plus,
   QrCode,
   RefreshCcw,
+  Settings,
   Sun,
   Trash2,
   UserRound,
@@ -118,6 +119,7 @@ function isClientOnline(client: Client) {
 async function api(path: string, init?: RequestInit) {
   const res = await fetch(path, init);
   if (res.status === 401) throw new Error("AUTH");
+  if (res.status === 503) throw new Error("SETUP");
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
     throw new Error(data.detail || `Request failed (${res.status})`);
@@ -174,6 +176,10 @@ export default function Home() {
     } catch (err) {
       if (err instanceof Error && err.message === "AUTH") {
         router.replace("/login");
+        return;
+      }
+      if (err instanceof Error && err.message === "SETUP") {
+        router.replace("/setup");
         return;
       }
       setError(err instanceof Error ? err.message : "Unable to load clients");
@@ -342,6 +348,7 @@ export default function Home() {
             <span>WireGuard</span>
           </div>
           <div className="header-actions">
+            <button className="config-button" onClick={() => router.push("/settings")}><Settings size={15} /> Config</button>
             <button className="theme-toggle" aria-label="Toggle theme" onClick={() => setDark((v) => !v)}>
               {dark ? <Sun size={18} /> : <Moon size={18} fill="currentColor" />}
             </button>

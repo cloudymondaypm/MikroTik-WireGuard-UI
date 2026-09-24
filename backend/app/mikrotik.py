@@ -37,7 +37,14 @@ class MikroTikREST:
             except (JSONDecodeError, ValueError) as e:
                 raise HTTPException(status_code=502, detail="MikroTik REST API returned invalid JSON") from e
         except httpx.HTTPError as e:
-            raise HTTPException(status_code=502, detail=f"Cannot reach MikroTik REST API: {e}") from e
+            detail = f"Cannot reach MikroTik REST API: {e}"
+            if isinstance(e, httpx.ConnectError) and "CERTIFICATE_VERIFY_FAILED" in str(e):
+                detail += (
+                    " — the router is presenting a certificate the app does not trust. "
+                    "If this is a self-signed certificate on a trusted private network, "
+                    "open Config and uncheck 'Verify router TLS certificate'."
+                )
+            raise HTTPException(status_code=502, detail=detail) from e
 
     async def test_connection(self):
         resource = await self._request("GET", "system/resource")

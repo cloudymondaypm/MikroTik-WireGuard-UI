@@ -115,15 +115,6 @@ function isClientOnline(client: Client) {
   return hasRecentHandshake || hasLiveTraffic;
 }
 
-function WireMark() {
-  return (
-    <svg width="27" height="34" viewBox="0 0 27 34" aria-hidden="true">
-      <path d="M15.7 2.5c-3.4 0-5.7 2.1-5.7 5.1 0 1.8.8 3 2.1 4.1-3.9.9-6.3 3.8-6.3 7.2 0 4.6 3.4 8.2 8.2 8.2 4.6 0 8-3.2 8-7.5 0-3-1.6-5.3-4.6-7.1 1.6-1.3 2.5-2.9 2.5-4.9 0-2.9-1.8-5.1-4.2-5.1Zm-.5 4.1c.8 0 1.4.6 1.4 1.4 0 .9-.6 1.6-1.6 2.2-.7-.5-1.2-1.1-1.2-2 0-1 .6-1.6 1.4-1.6Zm-1.3 9.1c2.5 0 4.3 1.5 4.3 3.8 0 2.2-1.6 3.8-4 3.8-2.6 0-4.4-1.7-4.4-4 0-2.1 1.6-3.6 4.1-3.6Z" fill="currentColor"/>
-      <path d="M12.7 11.2 9 6.7l2.8-1.4 3.6 4.2-2.7 1.7Z" fill="currentColor"/>
-    </svg>
-  );
-}
-
 async function api(path: string, init?: RequestInit) {
   const res = await fetch(path, init);
   if (res.status === 401) throw new Error("AUTH");
@@ -347,7 +338,7 @@ export default function Home() {
       <section className="content-wrap">
         <header className="topbar">
           <div className="brand">
-            <span className="wire-mark"><WireMark /></span>
+            <span className="wire-mark"><img className="brand-logo" src="/logo.svg" alt="" aria-hidden="true" /></span>
             <span>WireGuard</span>
           </div>
           <div className="header-actions">

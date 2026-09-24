@@ -8,9 +8,13 @@ from .config import settings
 
 
 class MikroTikREST:
-    def __init__(self):
-        self.base = f"{settings.mikrotik_rest_scheme}://{settings.mikrotik_host}:{settings.mikrotik_rest_port}/rest"
-        self.auth = (settings.mikrotik_username, settings.mikrotik_password)
+    @property
+    def base(self):
+        return f"{settings.mikrotik_rest_scheme}://{settings.mikrotik_host}:{settings.mikrotik_rest_port}/rest"
+
+    @property
+    def auth(self):
+        return (settings.mikrotik_username, settings.mikrotik_password)
 
     async def _request(self, method: str, path: str, json=None):
         try:
@@ -34,6 +38,17 @@ class MikroTikREST:
                 raise HTTPException(status_code=502, detail="MikroTik REST API returned invalid JSON") from e
         except httpx.HTTPError as e:
             raise HTTPException(status_code=502, detail=f"Cannot reach MikroTik REST API: {e}") from e
+
+    async def test_connection(self):
+        resource = await self._request("GET", "system/resource")
+        interface = await self.get_interface()
+        row = resource[0] if isinstance(resource, list) and resource else (resource or {})
+        return {
+            "ok": True,
+            "version": row.get("version"),
+            "board": row.get("board-name"),
+            "interface": interface.get("name"),
+        }
 
     async def get_interface(self):
         data = await self._request("GET", "interface/wireguard")

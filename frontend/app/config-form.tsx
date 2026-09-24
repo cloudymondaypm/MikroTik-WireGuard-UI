@@ -61,6 +61,11 @@ export default function ConfigForm({
   const [testing, setTesting] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [listenPort, setListenPort] = useState("");
+  const [currentListenPort, setCurrentListenPort] = useState<string | null>(null);
+  const [portSaving, setPortSaving] = useState(false);
+  const [portMessage, setPortMessage] = useState("");
+  const [portError, setPortError] = useState("");
 
   useEffect(() => {
     setForm({ ...defaults, ...initial, app_password: "", mikrotik_password: "" });
@@ -102,10 +107,42 @@ export default function ConfigForm({
       if (res.status === 401) throw new Error("Save the configuration and sign in before testing the router connection.");
       if (!res.ok) throw new Error(data.detail || "Connection test failed");
       setMessage(`Connected to RouterOS ${data.version || ""}${data.board ? ` on ${data.board}` : ""}. Interface: ${data.interface || "OK"}`);
+      if (data.listen_port) {
+        setCurrentListenPort(String(data.listen_port));
+        setListenPort((prev) => prev || String(data.listen_port));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Connection test failed");
     } finally {
       setTesting(false);
+    }
+  }
+
+  async function saveListenPort() {
+    const port = Number(listenPort);
+    setPortError("");
+    setPortMessage("");
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
+      setPortError("Enter a port between 1 and 65535.");
+      return;
+    }
+    setPortSaving(true);
+    try {
+      const res = await fetch("/api/settings/wireguard-port", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ listen_port: port }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || "Unable to change the WireGuard port");
+      setCurrentListenPort(String(port));
+      setPortMessage(
+        `WireGuard is now listening on UDP ${port}. Update the endpoint port on already-issued client configs and any router firewall/NAT rules to match.`
+      );
+    } catch (err) {
+      setPortError(err instanceof Error ? err.message : "Unable to change the WireGuard port");
+    } finally {
+      setPortSaving(false);
     }
   }
 
@@ -141,6 +178,37 @@ export default function ConfigForm({
           <label className="check-label"><input type="checkbox" checked={form.mikrotik_verify_tls} onChange={(e) => set("mikrotik_verify_tls", e.target.checked)} /> Verify router TLS certificate <small>leave unchecked for a self-signed certificate on a trusted private network; a mismatch here shows as &quot;certificate verify failed&quot;</small></label>
         </div>
       </section>
+
+      {mode === "settings" && (
+        <section className="config-section">
+          <h2>WireGuard VPN Port</h2>
+          <p className="config-hint">
+            Changes the UDP port the MikroTik WireGuard interface itself listens on for VPN connections.
+            {currentListenPort ? ` Current: UDP ${currentListenPort}.` : " Use Test connection above to load the current port."}
+          </p>
+          <div className="config-grid">
+            <label>
+              Listen port (UDP)
+              <input
+                type="number"
+                min={1}
+                max={65535}
+                placeholder="13231"
+                value={listenPort}
+                onChange={(e) => setListenPort(e.target.value)}
+              />
+            </label>
+          </div>
+          {portError && <div className="error-box">{portError}</div>}
+          {portMessage && <div className="success-box"><CheckCircle2 size={16} />{portMessage}</div>}
+          <div className="config-actions">
+            <button type="button" className="primary" onClick={saveListenPort} disabled={portSaving || !listenPort}>
+              {portSaving ? <Loader2 className="spin" size={16} /> : <Save size={16} />}
+              {portSaving ? "Applying…" : "Change VPN port"}
+            </button>
+          </div>
+        </section>
+      )}
 
       <section className="config-section">
         <h2>WireGuard Client Defaults</h2>

@@ -55,6 +55,7 @@ class MikroTikREST:
             "version": row.get("version"),
             "board": row.get("board-name"),
             "interface": interface.get("name"),
+            "listen_port": interface.get("listen-port"),
         }
 
     async def get_interface(self):
@@ -65,6 +66,18 @@ class MikroTikREST:
         raise HTTPException(
             status_code=404,
             detail=f"WireGuard interface '{settings.mikrotik_wg_interface}' was not found on the MikroTik router.",
+        )
+
+    async def set_listen_port(self, listen_port: int):
+        interface = await self.get_interface()
+        interface_id = interface.get(".id")
+        if not interface_id:
+            raise HTTPException(status_code=502, detail="MikroTik did not return an interface ID")
+        escaped = quote(interface_id, safe="*")
+        return await self._request(
+            "PATCH",
+            f"interface/wireguard/{escaped}",
+            json={"listen-port": str(listen_port)},
         )
 
     async def list_peers(self):

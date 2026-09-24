@@ -39,6 +39,10 @@ class ToggleRequest(BaseModel):
     enabled: bool
 
 
+class ListenPortRequest(BaseModel):
+    listen_port: int = Field(ge=1, le=65535)
+
+
 class AppConfigRequest(BaseModel):
     app_username: str = Field(default="admin", min_length=1, max_length=80)
     app_password: str = ""
@@ -175,6 +179,12 @@ def update_settings(body: AppConfigRequest, _: dict = Depends(require_auth)):
 @app.post("/api/settings/test")
 async def test_settings(_: dict = Depends(require_auth)):
     return await router.test_connection()
+
+
+@app.patch("/api/settings/wireguard-port")
+async def set_wireguard_port(body: ListenPortRequest, _: dict = Depends(require_auth)):
+    await router.set_listen_port(body.listen_port)
+    return {"ok": True, "listen_port": body.listen_port}
 
 
 @app.post("/api/auth/login")

@@ -2,8 +2,6 @@ services:
   backend:
     build: ./backend
     restart: unless-stopped
-    env_file:
-      - .env
     volumes:
       - wg-ui-data:/data
     expose:
